@@ -1,19 +1,31 @@
 {
   "devDependencies": {
+    "@types/express": "^4.17.3",
+    "@types/express-session": "^1.17.0",
     "@types/fs-extra": "^8.1.0",
     "@types/mocha": "^5.2.7",
     "@types/mysql": "^2.15.9",
     "@types/node": "^10.10.0",
     "eslint": "^5.6.0",
     "express": "^4.17.1",
+    "express-session": "^1.17.0",
     "fs-extra": "^9.0.0",
     "mocha": "^6.2.2",
     "mysql": "^2.18.1",
+    "nodemon": "^2.0.2",
     "ts-node": "^7.0.1",
     "typescript": "^3.0.3",
     "typescript-eslint-parser": "^18.0.0"
   },
   "scripts": {
+    "start": "nodemon --verbose -e ts,tsx",
     "test": "ts-node node_modules/mocha/bin/_mocha mocha 'test/**/*.spec.ts'"
+  },
+  "nodemonConfig": {
+    "watch": [
+      "src/server/**/*"
+    ],
+    "ignore": [],
+    "exec": "ts-node src/server/controller.ts"
   }
 }
