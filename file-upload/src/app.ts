@@ -4,7 +4,7 @@ import PATH from 'path'
 import formidable from 'formidable'
 import multiparty from 'multiparty'
 
-const PORT = 3602
+const PORT = 3601
 const htmlText = fs.readFileSync(
   PATH.resolve(__dirname, './client/upload.html'),
   { encoding: 'utf8' }
