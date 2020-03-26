@@ -1,5 +1,4 @@
-// import '../src/index'
-import '../src/actual-example/index'
+import '../src/index'
 const assert = require('assert')
 
 describe('Test', function () {
