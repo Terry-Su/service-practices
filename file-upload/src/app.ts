@@ -60,6 +60,19 @@ http
       return
     }
 
+    // # upload file with progress displayed
+    if (req.url === '/upload-progress-file' && req.method.toLowerCase() === 'post') {
+      const form = formidable({ multiples: true, maxFileSize: 5 * 1024 * 1024 * 1024 })
+      form.parse(req, (err, fields, files) => {
+        if (err) { console.log(err); res.end('Upload failed!'); return }
+        const file = files[Object.keys(files)[0]]
+        const outputFilePath = PATH.resolve(PATH_UPLOADED, file.name)
+        fs.moveSync(file.path, outputFilePath, { overwrite: true })
+        res.end('Upload succeeded!')
+      })
+      return
+    }
+
     // # upload big file
     if (req.url === '/upload-big-file' && req.method.toLowerCase() === 'post') {
       const form = new multiparty.Form()

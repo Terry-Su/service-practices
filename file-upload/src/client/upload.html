@@ -25,6 +25,16 @@
         </form>
         <br /><br />
         <form>
+            <label>Upload file with XMLHttpRequest (showing progress and speed)</label>
+            <br />
+            <input type="file" @change="handleChangeProgressFile">
+            <input type="button" value="Upload" @click="handleClickProgressFileButton">
+            <span>Progress: {{ progressFileProgressText }}</span>
+            &nbsp;
+            <span>Speed: {{ progressFileSpeedText }}</span>
+        </form>
+        <br /><br />
+        <form>
             <label>Upload big file by slices</label>
             <br />
             <input type="file" name="myBigFile" @change="handleBigFileChange">
@@ -67,6 +77,13 @@
                 el: '#app',
                 data: {
                     /* @type {{ name: string, size: number }} */
+                    progressFile: null,
+                    progressFileProgress: 0,
+                    progressFileSpeed: 0,
+                    progressFilePrevTimeStamp: 0,
+                    progressFilePrevLoaded: 0,
+
+                    /* @type {{ name: string, size: number }} */
                     bigFile: null,
                     bigFileChunkSize: 1024,
 
@@ -82,19 +99,64 @@
                     resumeBreakpointPaused: false,
                     resumeBreakPointLastUploadedChunkIndex: -1,
                 },
+                computed: {
+                    progressFileProgressText() {
+                        return `${(this.progressFileProgress*100).toFixed(2)}%`
+                    },
+                    progressFileSpeedText() {
+                        let speed = this.progressFileSpeed
+                        let type = 0
+                        const typeToUnit = {
+                            0: 'Bit',
+                            1: 'Kb',
+                            2: 'Mb',
+                            3: 'Gb'
+                        }
+                        100 * 1024 * 1024
+                        while ( speed >= 1024  ) {
+                            type++
+                            speed = speed / 1024
+                        }
+                        return `${speed.toFixed(1)}${typeToUnit[type]}/s`
+                    },
+                },
                 methods: {
-                    request({ url, method = 'post', headers = {}, data }) {
+                    request({ url, method = 'post', headers = {}, data, onUploadProgress }) {
                         return new Promise((resolve, reject) => {
                             const xhr = new XMLHttpRequest()
+                            xhr.onload = e => resolve(e.target.response)
+                            xhr.upload.onprogress = e => onUploadProgress && onUploadProgress(e)
                             xhr.open(method, url)
                             for (let key in headers) {
                                 xhr.setRequestHeader(key, headers[key])
                             }
                             xhr.send(data)
-                            xhr.onload = e => resolve(e.target.response)
-
                         })
                     },
+                    // # upload file with progress displayed
+                    handleChangeProgressFile(e) {
+                        this.progressFile = e.target.files[0]
+                        this.progressFileProgress = 0
+                    },
+                    handleClickProgressFileButton() {
+                        const formData = new FormData()
+                        formData.append( `file`, this.progressFile )
+                        this.request( { url: `/upload-progress-file`, data: formData, onUploadProgress: (e) => {
+                            this.progressFileProgress = e.loaded / e.total;
+                            if ( this.progressFilePrevTimeStamp !== 0 ) {
+                                this.progressFileSpeed = ( e.loaded - this.progressFilePrevLoaded ) / ( e.timeStamp - this.progressFilePrevTimeStamp ) * 1000
+                            }
+                            this.progressFilePrevTimeStamp = e.timeStamp
+                            this.progressFilePrevLoaded = e.loaded
+                        } } ).then( () => {
+                            this.progressFilePrevTimeStamp = 0;
+                            this.progressFilePrevLoaded = 0;
+                            this.progressFileSpeed = 0;
+                            alert( `Upload succeeded!` )
+                        } )
+                    },
+
+
                     // # upload big file
                     /* @return { { fileSlice: File, hash: string }[] } */
                     createBigFileChunks(file) {
