@@ -13,8 +13,6 @@ const PATH_UPLOADED = PATH.resolve(__dirname, '../uploaded')
 
 fs.ensureDirSync(PATH_UPLOADED)
 
-const UPLOADING_FILE_ID = 'myFile'
-
 http
   .createServer((req, res) => {
     // # upload file
@@ -28,11 +26,11 @@ http
           console.log(err)
           res.end('Upload failed!')
         }
-        const tmpFilePath = files[UPLOADING_FILE_ID].path
-        const outputPath = PATH.resolve(
-          PATH_UPLOADED,
-          files[UPLOADING_FILE_ID].name
-        )
+        const fileId = Object.keys(files)[0]
+        const tmpFilePath = files[fileId].path
+        const filename = files[fileId].name
+        if (filename.trim() === '') { res.end('Upload failed!'); return }
+        const outputPath = PATH.resolve(PATH_UPLOADED, filename)
         await fs.move(tmpFilePath, outputPath, { overwrite: true })
         res.end('Upload succeeded!')
       })
@@ -98,7 +96,6 @@ http
       })
       return
     }
-
     if (
       req.url === '/merge-big-file-slices' &&
       req.method.toLowerCase() === 'post'
@@ -130,7 +127,46 @@ http
             })
           })
         }
-        // fs.removeSync( chunkDir )
+        fs.removeSync(chunkDir)
+      })
+      return
+    }
+
+    // # upload file immediately
+    if (
+      req.url === '/upload-not-immediately' &&
+      req.method.toLowerCase() === 'post'
+    ) {
+      const form = formidable({ multiples: true, maxFileSize: 5 * 1024 * 1024 * 1024 })
+      form.parse(req, (err, fields, files) => {
+        if (err) {
+          console.log(err)
+          res.end('Upload not immediately failed!')
+        }
+        const file = files[Object.keys(files)[0]]
+        const hash = fields.hash
+        const filename = fields.filename
+        const targetFilePath = PATH.resolve(PATH_UPLOADED, `${filename}-${hash}`)
+        fs.moveSync(file.path, targetFilePath, { overwrite: true })
+        res.end('Upload not immediately succeeded!')
+      })
+      return
+    }
+    if (
+      req.url === '/upload-immediately' &&
+      req.method.toLowerCase() === 'post'
+    ) {
+      const form = formidable({ multiples: true })
+      form.parse(req, (err, fields, files) => {
+        if (err) {
+          console.log(err)
+          res.end('Upload immediately failed!')
+        }
+        const hash = fields.hash
+        const filename = fields.filename
+        const targetFilePath = PATH.resolve(PATH_UPLOADED, `${filename}-${hash}`)
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ data: fs.existsSync(targetFilePath) && fs.statSync(targetFilePath).isFile() }))
       })
       return
     }
