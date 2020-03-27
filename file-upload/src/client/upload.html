@@ -50,7 +50,7 @@
         </form>
         <br /><br />
         <form>
-            <label>Upload by resume breakpoint(use slices+check status on server)</label>
+            <label>Upload by resume breakpoint(Use slices+check status on server; To test breakpoint effect, choose file, click upload then click pause, then refresh page and re-upload the files again)</label>
             <br />
             <input type="file" name="myFile" @change="handleResumeBreakpointFileChange">
             <input v-if="!resumeBreakpointStarted" type="button" value="Upload"
@@ -59,6 +59,7 @@
                 @click="handleClickResumeBreakpointPauseButton">
             <input v-if="resumeBreakpointStarted && resumeBreakpointPaused" type="button" value="Continue"
                 @click="handleClickResumeBreakpointContinueButton">
+            <span>Progress: {{ resumeBreakPointFiledProgressText }}</span>
         </form>
     </div>
 
@@ -93,13 +94,16 @@
                     /* @type {{ name: string, size: number }} */
                     resumeBreakpointFile: null,
                     resumeBreakpointFileChunkSize: 1024,
+                    
                     /* @type {{ file: File, name: string  }} */
                     resumeBreakpointChunkList: [],
                     resumeBreakpointStarted: false,
                     resumeBreakpointPaused: false,
-                    resumeBreakPointLastUploadedChunkIndex: -1,
+                    resumeBreakPointLastUploadedChunkIndex: 0,
+                    resumeBreakPointFileLoadedSize: 0,
                 },
                 computed: {
+                    // # upload file with progress displayed
                     progressFileProgressText() {
                         return `${(this.progressFileProgress*100).toFixed(2)}%`
                     },
@@ -119,6 +123,12 @@
                         }
                         return `${speed.toFixed(1)}${typeToUnit[type]}/s`
                     },
+
+                    // # upload file by resume breakpoint
+                    resumeBreakPointFiledProgressText() {
+                        return `${this.resumeBreakpointFile ?(this.resumeBreakPointFileLoadedSize/this.resumeBreakpointFile.size*100).toFixed(2) : 0}%`
+                    }
+
                 },
                 methods: {
                     request({ url, method = 'post', headers = {}, data, onUploadProgress }) {
@@ -201,7 +211,6 @@
                         this.uploadImmediatelyFile = e.target.files[0]
                     },
                     handleClickUploadImmediatelyUploadButton() {
-                        this.resumeBreakpointStarted = true
                         // # use web worker to calculate file md5
                         const blob = new Blob([document.querySelector('#upload-immediately-worker').innerHTML], { type: 'text/javascript' })
                         const worker = new Worker(URL.createObjectURL(blob))
@@ -234,17 +243,18 @@
 
                     // # upload by resume breakpoint 
                     handleResumeBreakpointFileChange(e) {
+                        this.resetResumeBreakpoint()
                         this.resumeBreakpointFile = e.target.files[0]
                         this.resumeBreakpointFileChunkSize = getChunkSize( this.resumeBreakpointFile.size )
-                        this.resetResumeBreakpoint()
                     },
                     handleClickResumeBreakpointUploadButton() {
+                        this.resumeBreakpointStarted = true
                         // # slice
                         let startIndex = 0
                         let index = 0
                         const arr = []
                         while (startIndex < this.resumeBreakpointFile.size) {
-                            const file = this.resumeBreakpointFile.slice(startIndex, startIndex + this.resumeBreakpointFileChunkSize)
+                            const file = this.resumeBreakpointFile.slice(startIndex, Math.min(startIndex + this.resumeBreakpointFileChunkSize, this.resumeBreakpointFile.size))
                             arr.push({ file, name: `${index}-${this.resumeBreakpointFile.name}` })
                             startIndex += this.resumeBreakpointFileChunkSize
                             index++
@@ -264,7 +274,15 @@
                     },
                     uploadResumeBreakpointChunks() {
                         let uploadNext = (chunkList, chunkIndex) => {
-                            if (this.resumeBreakpointPaused || chunkIndex >= chunkList.length) {
+                            if (this.resumeBreakpointPaused) {
+                                return
+                            } else if ( chunkIndex >= chunkList.length ) {
+                                const formData3 = new FormData()
+                                formData3.append(`filename`, this.resumeBreakpointFile.name)
+                                this.request({ url: `/merge-resume-breakpoint-chunks`, data: formData3 }).then(() => {
+                                    alert(`Upload succeeded!`)
+                                    this.resetResumeBreakpoint()
+                                })
                                 return
                             }
                             const chunk = chunkList[chunkIndex]
@@ -274,38 +292,35 @@
                             this.request({ url: `/upload-resume-breakpoint-chunk-immediately`, data: formData }).then(response => {
                                 const afterUploaded = () => {
                                     this.resumeBreakPointLastUploadedChunkIndex++
-                                    if (this.resumeBreakPointLastUploadedChunkIndex >= chunkList.length) {
-                                        const formData3 = new FormData()
-                                        formData3.append(`filename`, this.resumeBreakpointFile.name)
-                                        this.request({ url: `/merge-resume-breakpoint-chunks`, data: formData3 }).then(() => {
-                                            alert(`Upload succeeded!`)
-                                            this.resetResumeBreakpoint()
-                                        })
-                                    } else {
-                                        uploadNext(chunkList, this.resumeBreakPointLastUploadedChunkIndex)
-                                    }
+                                    uploadNext(chunkList, this.resumeBreakPointLastUploadedChunkIndex)
                                 }
                                 if (JSON.parse(response).data) {
                                     afterUploaded()
+                                    this.resumeBreakPointFileLoadedSize += this.resumeBreakpointFileChunkSize
                                 } else {
                                     const formData2 = new FormData()
                                     formData2.append(`chunkName`, chunk.name)
                                     formData2.append(`file`, chunk.file)
                                     formData2.append(`filename`, this.resumeBreakpointFile.name)
-                                    this.request({ url: `/upload-resume-breakpoint-chunk`, data: formData2 }).then(() => {
+                                    let prevLoaded = 0
+                                    this.request({ url: `/upload-resume-breakpoint-chunk`, data: formData2, onUploadProgress: e => {
+                                        this.resumeBreakPointFileLoadedSize += (e.loaded - prevLoaded)
+                                        prevLoaded = e.loaded
+                                    } }).then(() => {
                                         afterUploaded()
                                     })
                                 }
 
                             })
                         }
-                        uploadNext(this.resumeBreakpointChunkList, this.resumeBreakPointLastUploadedChunkIndex + 1)
+                        uploadNext(this.resumeBreakpointChunkList, this.resumeBreakPointLastUploadedChunkIndex)
                     },
                     resetResumeBreakpoint() {
+                        this.resumeBreakPointFileLoadedSize = 0
                         this.resumeBreakpointChunkList = []
                         this.resumeBreakpointStarted = false
                         this.resumeBreakpointPaused = false
-                        this.resumeBreakPointLastUploadedChunkIndex = -1
+                        this.resumeBreakPointLastUploadedChunkIndex = 0
                     },
 
                 }
