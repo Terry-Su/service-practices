@@ -171,6 +171,54 @@ http
       return
     }
 
+    // # upload file by resume breakpoint
+    if (req.url === '/upload-resume-breakpoint-chunk-immediately' && req.method.toLowerCase() === 'post') {
+      const form = formidable()
+      form.parse(req, (err, fields, files) => {
+        if (err) { console.log(err); res.end('Upload failed!') }
+        const { chunkName, filename } = fields
+        const checkingFilePath = PATH.resolve(PATH_UPLOADED, `.${filename}/${chunkName}`)
+        res.end(JSON.stringify({
+          data: fs.existsSync(checkingFilePath) && fs.statSync(checkingFilePath).isFile()
+        }))
+      })
+      return
+    }
+    if (req.url === '/upload-resume-breakpoint-chunk' && req.method.toLowerCase() === 'post') {
+      const form = formidable({ multiples: true, maxFileSize: 5 * 1024 * 1024 * 1024 })
+      form.parse(req, (err, fields, files) => {
+        if (err) { console.log(err); res.end('Upload failed!') }
+        const { chunkName, filename } = fields
+        const file = files[Object.keys(files)[0]]
+        const outputFilePath = PATH.resolve(PATH_UPLOADED, `.${filename}/${chunkName}`)
+        fs.moveSync(file.path, outputFilePath, { overwrite: true })
+        res.end('Upload succeeded!')
+      })
+      return
+    }
+    if (req.url === '/merge-resume-breakpoint-chunks' && req.method.toLowerCase() === 'post') {
+      const form = formidable()
+      form.parse(req, async (err, fields, files) => {
+        if (err) { console.log(err); res.end('Upload failed!') }
+        const { filename } = fields
+        const outputFilePath = PATH.resolve(PATH_UPLOADED, filename)
+        const writingStream = fs.createWriteStream(outputFilePath)
+        const chunksdir = PATH.resolve(PATH_UPLOADED, `.${filename}`)
+        const chunkFileNames = fs.readdirSync(chunksdir).sort((a, b) => +a.replace(/-.*/, '') - (+b.replace(/-.*/, '')))
+        const chunkFilePaths = chunkFileNames.map(v => PATH.resolve(chunksdir, v))
+        for (const chunkFilePath of chunkFilePaths) {
+          const readingStream = fs.createReadStream(chunkFilePath)
+          await new Promise(resolve => {
+            readingStream.on('end', resolve)
+            readingStream.pipe(writingStream, { end: false })
+          })
+        }
+        fs.removeSync(chunksdir)
+        res.end('Upload succeeded!')
+      })
+      return
+    }
+
     res.end(htmlText)
   })
   .listen(PORT)
