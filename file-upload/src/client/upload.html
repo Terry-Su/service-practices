@@ -184,6 +184,7 @@
                     handleBigFileChange(e) {
                         const [file] = e.target.files
                         this.bigFile = file
+                        this.bigFileChunkSize = getChunkSize( this.bigFile )
                     },
                     handleClickUploadBigFileUploadButton() {
                         const chunks = this.createBigFileChunks(this.bigFile)
@@ -193,10 +194,10 @@
                             formData.append(`fileSlice`, chunk.fileSlice)
                             formData.append(`hash`, chunk.hash)
                             formData.append(`filename`, this.bigFile.name)
-                            return this.request({ url: `/upload-big-file`, data: formData })
+                            return this.request({ url: `/upload-big-file-slice`, data: formData })
                         })
                         Promise.all(requestPromises).then(() => {
-                            console.log('Upload successfully')
+                            alert('Upload succeeded!')
 
                             // # send merge request
                             const formData = new FormData()
@@ -337,7 +338,6 @@
             fileReader.readAsArrayBuffer(uploadImmediatelyFile)
             fileReader.onload = (event) => {
                 const hash = md5(e.target.result)
-                console.log(hash)
                 self.postMessage(hash)
             }
         }

@@ -2,9 +2,8 @@ import http from 'http'
 import fs from 'fs-extra'
 import PATH from 'path'
 import formidable from 'formidable'
-import multiparty from 'multiparty'
 
-const PORT = 3601
+const PORT = 3600
 const htmlText = fs.readFileSync(
   PATH.resolve(__dirname, './client/upload.html'),
   { encoding: 'utf8' }
@@ -74,17 +73,17 @@ http
     }
 
     // # upload big file
-    if (req.url === '/upload-big-file' && req.method.toLowerCase() === 'post') {
-      const form = new multiparty.Form()
+    if (req.url === '/upload-big-file-slice' && req.method.toLowerCase() === 'post') {
+      const form = formidable()
       form.parse(req, async (err, fields, files) => {
         if (err) {
           console.log(err)
           res.end('Upload failed!')
           return
         }
-        const [fileSlice] = files.fileSlice
-        const [hash] = fields.hash
-        const [filename] = fields.filename
+        const fileSlice = files.fileSlice
+        const hash = fields.hash
+        const filename = fields.filename
         const chunkDir = PATH.resolve(PATH_UPLOADED, `.${filename}`)
         if (!fs.existsSync(chunkDir)) {
           fs.mkdirSync(chunkDir)
@@ -113,14 +112,14 @@ http
       req.url === '/merge-big-file-slices' &&
       req.method.toLowerCase() === 'post'
     ) {
-      const form = new multiparty.Form()
+      const form = formidable()
       form.parse(req, async (err, fields, files) => {
         if (err) {
           console.log(err)
           res.end('Merge failed!')
           return
         }
-        const [filename] = fields.filename
+        const filename = fields.filename
         const chunkDir = PATH.resolve(PATH_UPLOADED, `.${filename}`)
         const chunkFileNames = fs.readdirSync(chunkDir)
         const chunkFilePaths = chunkFileNames
